@@ -58,6 +58,7 @@ RoutingManager::AddNodeLink(int nodeID, int destID, int destCost)
 	{
 		Node n = Node();
 		n.id = nodeID;
+		n.online = false;
 		n.neighbors.insert(pair<int,int>(destID, destCost));
 
 		topology.insert(pair<int, Node>(nodeID, n));
@@ -77,6 +78,39 @@ RoutingManager::AddNodeLink(int nodeID, int destID, int destCost)
 				<< "}, with cost {" << topology.at(nodeID).neighbors.at(destID) << "}\n";
 		#endif
 	}
+}
+
+bool
+RoutingManager::ActivateNewNode()
+{
+	TopologyIter iter = topology.begin();
+	if(iter == topology.end())
+		return false; //no topology set
+
+	do
+	{
+		if(!iter->second.online)
+		{
+			iter->second.online = true;
+			iter->second.connection.fd = myConnection->newConnections.back().fd;
+			strncpy(iter->second.connection.ipstr, myConnection->newConnections.back().ipstr, INET6_ADDRSTRLEN);
+			iter->second.connection.port = myConnection->newConnections.back().port;
+			iter->second.connection.sin_size = myConnection->newConnections.back().sin_size;
+			iter->second.connection.theirAddress = myConnection->newConnections.back().theirAddress;
+			myConnection->newConnections.pop_back();
+
+			cout << "Connected Activated!\n";
+			cout << "Node ID: " << iter->second.id << endl;
+			cout << "Node Socket: " << iter->second.connection.fd << endl;
+			cout << "Node Port: " << iter->second.connection.port << endl;
+			return true; //all good
+		}
+
+		iter++;
+
+	}while (iter != topology.end());
+
+	return false; //received a connection, but no more nodes to hand out
 }
 
 int
@@ -125,14 +159,27 @@ RoutingManager::PrintTopology()
 /************************************************/
 int main(int argc, const char* argv[])
 {
-	TCPConnection *tcpcon = new TCPConnection("localhost", "7777");
-	tcpcon->SetHints();
-	tcpcon->PopulateAddressInfo();
-	tcpcon->BindSocket();
-	cout << "\n\t**** **** ****\n";
-
 	RoutingManager *manager = new RoutingManager();
 	manager->ParseInputFile("topo.txt", 10, 3, " ");
+	manager->PopulateTopology();
+	cout << "\n\t**** **** ****\n";
+
+	manager->myConnection = new NetworkConnection("localhost", "7771");
+	manager->myConnection->SetSocketHints();
+	manager->myConnection->PopulateAddressInfo();
+	manager->myConnection->BindSocket();
+
+	while(1)
+	{
+		manager->myConnection->ListenForConnections();
+		if (manager->myConnection->newConnections.size() > 0)
+		{
+			manager->ActivateNewNode();
+		}
+
+	}
+
+	cout << "\n\t**** **** ****\n";
 
 	#if logging > 1
 		// print the tokens
@@ -140,9 +187,6 @@ int main(int argc, const char* argv[])
 	      cout << "Token[" << i << "] = " << manager->tokens[i] << endl;
 	    cout << "\n\t**** **** ****\n";
     #endif
-
-	manager->PopulateTopology();
-	cout << "\n\t**** **** ****\n";
 
 	#if logging > 0
 		manager->PrintTopology();

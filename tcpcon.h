@@ -1,8 +1,10 @@
 #pragma once
 
 #include "globals.h"
+#include "nodecon.h"
 
 #include <unistd.h>
+#include <fcntl.h>
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -12,11 +14,11 @@
 #include <sys/wait.h>
 #include <signal.h>
 
-class TCPConnection{
+class NetworkConnection{
 
 	public:
 
-		TCPConnection(const char *target, const char *port);
+		NetworkConnection(const char *target, const char *port);
 
 		/*************************/
 		/* Accessors & Setters   */
@@ -84,14 +86,17 @@ class TCPConnection{
 		/******************************/
 		/* End: Accessors & Setters   */
 		/******************************/
-
-	    void sigchld_handler();
 	    void *get_in_addr(struct sockaddr *sa);
-	    void SetHints(/*blank for now*/);
+	    void SetSocketHints(/*blank for now*/);
 	    int PopulateAddressInfo();
 	    int BindSocket();
+	    int ListenForConnections();
+
+		vector<NodeConnection> newConnections;
 
 	private:
+		
+
 		//if target is NULL, we are hosting
 		const char *target;
 		const char *port;
@@ -107,7 +112,7 @@ class TCPConnection{
 
 		char remoteAddress;
 
-		int yes;
+		int yes; // for unix
 
 		static const string Client;
 		static const string Server;

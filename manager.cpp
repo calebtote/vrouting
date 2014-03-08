@@ -2,7 +2,7 @@
 
 RoutingManager::RoutingManager()
 {
-
+	activeNodeCount = 0;
 }
 
 int
@@ -17,6 +17,114 @@ RoutingManager::GenerateVirtualNodeID(int inputNodeID)
 	    Example: for Node 4 our ID will be 3704
 	             and we will also listen on port 3704  */
 	return inputNodeID+3700;
+}
+
+int
+RoutingManager::Initialize(int myPort)
+{
+	int length, n;
+   	struct sockaddr_in server;
+   
+  	mySocket = socket(AF_INET, SOCK_DGRAM, 0);
+   	if (mySocket < 0) 
+   		perror("Opening socket");
+
+   	length = sizeof(server);
+   	bzero(&server,length);
+
+   	server.sin_family = AF_INET;
+   	server.sin_addr.s_addr = INADDR_ANY;
+   	server.sin_port = htons(myPort);
+
+   	if (bind(mySocket,(struct sockaddr *)&server,length) < 0) 
+    	perror("binding");
+}
+
+int
+RoutingManager::WaitForNewNodes()
+{
+	while(topology.size() > activeNodeCount)
+	{
+		int n;
+		char buffer[1024];
+		bzero(buffer,1024);
+		unsigned int length = sizeof(struct sockaddr_in);
+		struct sockaddr_in from;
+
+		cout << "Waiting for nodes...\n";
+		n = recvfrom(mySocket,buffer,1024,0,(struct sockaddr *)&from, &length);
+		
+		if (n < 0) 
+			perror("recvfrom");
+		else
+			ActivateNewNode(from);
+	}
+}
+
+bool
+RoutingManager::ActivateNewNode(struct sockaddr_in newNode)
+{
+	TopologyIter iter = topology.begin();
+	char ip4[INET_ADDRSTRLEN];
+
+	//check if the topology is set, or if the connection we're trying to activate
+	//is already a member of our virtual-network
+	if(iter == topology.end() || 
+		std::find(activeNodes.begin(), activeNodes.end(), newNode) != activeNodes.end())
+			return false;
+
+	do
+	{
+		if(!iter->second.online)
+		{
+			activeNodeCount++;
+
+			iter->second.online = true;
+			iter->second.connection.theirAddress = newNode;
+			iter->second.connection.ipstr = inet_ntop(AF_INET, &newNode.sin_addr, ip4, INET_ADDRSTRLEN);
+            iter->second.connection.port = newNode.sin_port;
+
+			cout << "Connected Activated!\n";
+			cout << "Node ID: " << iter->second.id << endl;
+			cout << "Node Port: " << iter->second.connection.port << endl;
+
+			activeNodes.push_back(newNode);
+
+			#if logging > 0
+				for (activeNodesIter it = activeNodes.begin(); it != activeNodes.end(); it++)
+				{
+					cout << "\n\nPort: " << it->sin_port << endl;
+					cout << "Address: " << inet_ntop(AF_INET, &it->sin_addr, ip4, INET_ADDRSTRLEN) << endl;
+				}
+
+				cout << "\nActive Nodes: " << activeNodeCount << endl;
+			#endif
+
+			SendMessage(iter->second.connection.theirAddress, "Thanks for coming!");
+
+			return true; //all good
+		}
+
+		iter++;
+
+	}while (iter != topology.end());
+
+	return false; //received a connection, but no more nodes to hand out
+}
+
+int
+RoutingManager::SendMessage(struct sockaddr_in toNode, char buffer[1024])
+{
+	int n;
+	unsigned int length = sizeof(struct sockaddr_in);
+
+	n = sendto(mySocket, buffer, strlen(buffer),0,
+				(const struct sockaddr *)&toNode,length);
+
+	if (n < 0) 
+		perror("Sendto");
+
+	cout << "Sent: " << n << " bytes of data\n";
 }
 
 int
@@ -80,39 +188,6 @@ RoutingManager::AddNodeLink(int nodeID, int destID, int destCost)
 	}
 }
 
-bool
-RoutingManager::ActivateNewNode()
-{
-	TopologyIter iter = topology.begin();
-	if(iter == topology.end())
-		return false; //no topology set
-
-	do
-	{
-		if(!iter->second.online)
-		{
-			iter->second.online = true;
-			iter->second.connection.fd = myConnection->newConnections.back().fd;
-			strncpy(iter->second.connection.ipstr, myConnection->newConnections.back().ipstr, INET6_ADDRSTRLEN);
-			iter->second.connection.port = myConnection->newConnections.back().port;
-			iter->second.connection.sin_size = myConnection->newConnections.back().sin_size;
-			iter->second.connection.theirAddress = myConnection->newConnections.back().theirAddress;
-			myConnection->newConnections.pop_back();
-
-			cout << "Connected Activated!\n";
-			cout << "Node ID: " << iter->second.id << endl;
-			cout << "Node Socket: " << iter->second.connection.fd << endl;
-			cout << "Node Port: " << iter->second.connection.port << endl;
-			return true; //all good
-		}
-
-		iter++;
-
-	}while (iter != topology.end());
-
-	return false; //received a connection, but no more nodes to hand out
-}
-
 int
 RoutingManager::PopulateTopology()
 {
@@ -164,20 +239,16 @@ int main(int argc, const char* argv[])
 	manager->PopulateTopology();
 	cout << "\n\t**** **** ****\n";
 
-	manager->myConnection = new NetworkConnection("localhost", "7771");
+	manager->Initialize();
+	manager->WaitForNewNodes();
+
+	/*
+	manager->myConnection = new NetworkConnection(NULL, "5000");
+	
 	manager->myConnection->SetSocketHints();
 	manager->myConnection->PopulateAddressInfo();
 	manager->myConnection->BindSocket();
-
-	while(1)
-	{
-		manager->myConnection->ListenForConnections();
-		if (manager->myConnection->newConnections.size() > 0)
-		{
-			manager->ActivateNewNode();
-		}
-
-	}
+	*/
 
 	cout << "\n\t**** **** ****\n";
 
@@ -188,7 +259,7 @@ int main(int argc, const char* argv[])
 	    cout << "\n\t**** **** ****\n";
     #endif
 
-	#if logging > 0
+	#if logging > 1
 		manager->PrintTopology();
 		cout << "\n\t**** **** ****\n";
 	#endif
@@ -196,4 +267,4 @@ int main(int argc, const char* argv[])
 	cout << "\n\t****  End.  ****\n";
 
 	return 0;
-}
+}/**/

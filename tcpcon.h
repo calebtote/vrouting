@@ -1,3 +1,10 @@
+/*******************************************************************/
+/*******************************************************************/
+/********         THIS FILE NOT CURRENTLY USED             *********/
+/*******************************************************************/
+/*******************************************************************/
+
+
 #pragma once
 
 #include "globals.h"
@@ -87,14 +94,21 @@ class NetworkConnection{
 		/* End: Accessors & Setters   */
 		/******************************/
 	    void *get_in_addr(struct sockaddr *sa);
-	    void SetSocketHints(/*blank for now*/);
+	    void SetSocketHints(int socketType = SOCK_DGRAM);
 	    int PopulateAddressInfo();
 	    int BindSocket();
+
+	    //udp
+	    int GetData();
+	    int SendData();
+
+	    //tcp
 	    int ListenForConnections();
+	    int ConnectToHost();
 
 		vector<NodeConnection> newConnections;
 
-	private:
+	public:
 		
 
 		//if target is NULL, we are hosting

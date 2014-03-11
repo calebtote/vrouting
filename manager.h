@@ -7,8 +7,20 @@
 #include <fstream>
 #include <list>
 
+const int MYPORT = 7777;
+
 typedef map<int,Node, less<int> >::iterator TopologyIter;
 typedef vector<sockaddr_in>::iterator activeNodesIter;
+
+bool operator == (const sockaddr_in &lhs, const sockaddr_in& rhs) {
+      return lhs.sin_family == rhs.sin_family 
+        && lhs.sin_port == rhs.sin_port
+        && lhs.sin_addr.s_addr == rhs.sin_addr.s_addr;
+       // && lhs.sin_zero == rhs.sin_zero;
+}
+bool operator != (const sockaddr_in &lhs, const sockaddr_in& rhs) {
+      return !(lhs == rhs);
+}
 
 class RoutingManager
 {
@@ -17,8 +29,9 @@ public:
 	static const int MAX_NODES = 100;
 
 	RoutingManager();
-	int Initialize(int myPort = 7777);
+	int Initialize(int myPort = MYPORT);
 	int WaitForNewNodes();
+	void GenerateConnectionString(struct Node n, char* buf);
 	int SendMessage(struct sockaddr_in toNode, char buffer[1024]);
 	int GenerateVirtualNodeID(int inputNodeID);
 	int ParseInputFile(char* filePath, const int MAX_CHARS_PER_LINE = 512, 

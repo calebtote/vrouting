@@ -100,7 +100,9 @@ RoutingManager::ActivateNewNode(struct sockaddr_in newNode)
 				cout << "\nActive Nodes: " << activeNodeCount << endl;
 			#endif
 
-			SendMessage(iter->second.connection.theirAddress, "Thanks for coming!");
+			char buf[512];		
+			GenerateConnectionString(iter->second, buf);
+			SendMessage(iter->second.connection.theirAddress, buf);
 
 			return true; //all good
 		}
@@ -112,16 +114,27 @@ RoutingManager::ActivateNewNode(struct sockaddr_in newNode)
 	return false; //received a connection, but no more nodes to hand out
 }
 
+void
+RoutingManager::GenerateConnectionString(struct Node n, char* buffer)
+{
+	bzero(buffer,512);
+	sprintf(buffer, "@7777~15~%d", n.id);
+}
+
 int
 RoutingManager::SendMessage(struct sockaddr_in toNode, char buffer[1024])
 {
+	#if logging > 1
+		cout << "Sending: " << buffer << endl;
+	#endif
+	
 	int n;
 	unsigned int length = sizeof(struct sockaddr_in);
 
 	n = sendto(mySocket, buffer, strlen(buffer),0,
 				(const struct sockaddr *)&toNode,length);
 
-	if (n < 0) 
+	if (n < strlen(buffer)) 
 		perror("Sendto");
 
 	cout << "Sent: " << n << " bytes of data\n";

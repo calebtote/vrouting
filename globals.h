@@ -5,9 +5,9 @@
 // that sounded nice at the time
 // ------------------------------
 // 0 : no logging
-// 1 : minimal logging
-// 2 : verbose logging
-#define logging 1
+// 1 : informational
+// 2 : debugging
+#define logging 2
 
 // standard includes because I'm lazy
 // this is so bad...
@@ -21,6 +21,7 @@
 #include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
+#include <map>
 
 #include <fcntl.h>
 #include <errno.h>
@@ -36,13 +37,3 @@
 #include <signal.h>
 
 using namespace std;
-
-bool operator == (const sockaddr_in &lhs, const sockaddr_in& rhs) {
-      return lhs.sin_family == rhs.sin_family 
-        && lhs.sin_port == rhs.sin_port
-        && lhs.sin_addr.s_addr == rhs.sin_addr.s_addr;
-       // && lhs.sin_zero == rhs.sin_zero;
-}
-bool operator != (const sockaddr_in &lhs, const sockaddr_in& rhs) {
-      return !(lhs == rhs);
-}

@@ -17,20 +17,20 @@ const int MAX_CHARS_PER_LINE = 512;
 				- Says: Hello, I'm router 3702
 			Example:  @3702~10~Howdy
 				- Says: I'm 3702 sending you the message: Howdy
-			Example:  @3702~01~~10~Howdy
+			Example:  @3702~01~ ~10~Howdy
 				- Says: Hello, I'm router 3702. I'm sending you the message: Howdy
 */
 
 class RoutingMessage
 {
 public:
-	bool ParseMessage(char* buffer, int &fromNode, map<int, string> &messages, const int MAX_CHARS_PER_LINE = 512, 
+	bool ParseMessage(char* buffer, int &fromNode, multimap<int, string> &messages, const int MAX_CHARS_PER_LINE = 512, 
 							    const int MAX_TOKENS_PER_LINE = 20, const char* const DELIMITER = "~");
 
 
 	//defined message types
 	//multi-token strings must have a space between each delimeter
-	//regardless of whether or not it's used
+	//regardless of whether or not it's used (i.e., '~ ~')
 	enum
 	{
 		HELLO = 1, //@7777~01~ ~10~hi
@@ -43,6 +43,7 @@ public:
 		CONVERGING = 20,
 		LINKADD = 21, //@7777~21~3702.11 :: Connected to 3702 with cost 11
 		LINKUPDATE = 22, //same as above, just with code 22
+		REQNBRINFO = 25, //@7777~25~3701 :: Give me my neighbors
 		CONVERGED = 30,
 
 		ERROR = 99,

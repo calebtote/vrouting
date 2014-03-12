@@ -5,13 +5,17 @@
 #include "rtngmsg.h"
 
 typedef map<int,string, less<int> >::iterator messagesIter;
+typedef map<int,int, less<int> >::iterator neighborsIter;
 
 class RoutingNode
 {
 public:
 	int Initialize(const char* theManager);
+	int SendMessage(struct sockaddr_in toNode, char buffer[512]);
 	//NetworkConnection *myConnection;
 	int GetMyID();
+	int GetMyNeighbors();
+	int BindSocketToPort();
 	int CreateNeighborSocket();
 	int ProcessMessages();
 	int myID;
@@ -21,8 +25,11 @@ public:
 	struct sockaddr_in neighbor;
 
 	map<int, struct Node> topology;
+
+	//this nodes known neighbors
+	std::map<int,int> neighbors;
 	
 	int fromNode;
-	map<int, string> messages;
+	multimap<int, string> messages;
 	RoutingMessage parser;
 };

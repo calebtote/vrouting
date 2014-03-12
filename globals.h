@@ -37,3 +37,5 @@
 #include <signal.h>
 
 using namespace std;
+
+const int SERVER_PORT = 7777;

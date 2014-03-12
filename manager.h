@@ -4,10 +4,9 @@
 
 //#include "tcpcon.h"
 #include "node.h"
+#include "rtngmsg.h"
 #include <fstream>
 #include <list>
-
-const int MYPORT = 7777;
 
 typedef map<int,Node, less<int> >::iterator TopologyIter;
 typedef vector<sockaddr_in>::iterator activeNodesIter;
@@ -29,9 +28,10 @@ public:
 	static const int MAX_NODES = 100;
 
 	RoutingManager();
-	int Initialize(int myPort = MYPORT);
+	int Initialize(int myPort = SERVER_PORT);
 	int WaitForNewNodes();
-	void GenerateConnectionString(struct Node n, char* buf);
+	void GenerateConnectionString(int id, char* buf);
+	void SendNeighborInformation(struct Node n, char* buffer);
 	int SendMessage(struct sockaddr_in toNode, char buffer[1024]);
 	int GenerateVirtualNodeID(int inputNodeID);
 	int ParseInputFile(char* filePath, const int MAX_CHARS_PER_LINE = 512, 

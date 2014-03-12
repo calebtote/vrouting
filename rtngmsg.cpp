@@ -1,7 +1,7 @@
 #include "rtngmsg.h"
 
 bool
-RoutingMessage::ParseMessage(char* buffer, int &fromNode, map<int, string> &messages, const int MAX_CHARS_PER_LINE, 
+RoutingMessage::ParseMessage(char* buffer, int &fromNode, multimap<int, string> &messages, const int MAX_CHARS_PER_LINE, 
 							    const int MAX_TOKENS_PER_LINE, const char* const DELIMITER)
 {
 	#if logging > 1

@@ -190,7 +190,6 @@ RoutingManager::Listen()
 	int n;
 	char buffer[512];
 	bzero(buffer,512);
-	unsigned int length = sizeof(struct sockaddr_in);
 	struct sockaddr_in from;
 	RoutingMessage parser;
 
@@ -198,7 +197,7 @@ RoutingManager::Listen()
 		cout << "Listening...\n";
 	#endif
 
-	n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&from, &length);
+	n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&from, &sockLen);
 	
 	if (n < 0) 
 		perror("recvfrom");

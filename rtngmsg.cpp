@@ -5,7 +5,7 @@ RoutingMessage::ParseMessage(char* buffer, int &fromNode, multimap<int, string> 
 							    const int MAX_TOKENS_PER_LINE, const char* const DELIMITER)
 {
 	#if logging > 1
-		cout << "Buffer: " << buffer << endl;
+		cout << "Buffer to parse: " << buffer << endl;
 	#endif
 
     if (buffer[0] != '@')

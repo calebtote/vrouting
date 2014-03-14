@@ -195,9 +195,9 @@ RoutingNode::ProcessMessages()
 				buf.erase(0, buf.find(delim) + delim.length());
 				destCost = atoi(buf.substr(0, buf.find(delim)).c_str());
 
-				if( IsBetterPath(destID, destCost + GetNeighborLinkCost(iter->first)) )
+				if( IsBetterPath(destID, destCost + GetNeighborLinkCost(fromNode)) )
 				{
-					UpdateForwardingTable(destID, iter->first, destCost);
+					UpdateForwardingTable(destID, fromNode, GetNeighborLinkCost(fromNode));
 					SendForwardingTableToNeighbors();
 				}
 			}
@@ -221,6 +221,8 @@ RoutingNode::GetNeighborLinkCost(int id)
 bool
 RoutingNode::IsBetterPath(int destID, int destCost)
 {
+	cout << "Dest: " << destID << endl;
+	cout << "Cost: " << destCost << endl;
 	return true;
 }
 
@@ -229,13 +231,12 @@ RoutingNode::UpdateForwardingTable(int dest, int hop, int cost)
 {
 	forwardingTable[dest][hop] = cost;
 
-	forwardingTableIter iter = forwardingTable.begin();
-	
+	forwardingTableIter iter = forwardingTable.begin();	
 	#if logging > 1
-		cout << "Forwarding Table Updated!\n";
+		cout << "\t\t\t*** Forwarding Table Updated! ***\n";
 		while(iter != forwardingTable.end())
 		{
-			cout << "Dest: " << iter->first << "\tHop: " << iter->second[0] << "\tCost: " << iter->second[1] << endl << "   ***   \n";
+			cout << "\t\t\tDest: " << iter->first << "\tHop: " << iter->second[0] << "\tCost: " << iter->second[1] << endl << "   ***   \n";
 			iter++;
 		}
 	#else
@@ -298,13 +299,29 @@ RoutingNode::WaitForAllClear()
 {
 	char buffer[512];
 	bzero(buffer,512);
-	unsigned int length = sizeof(struct sockaddr_in);
 
 	//replace with message-type parser at some point
 	while (buffer[6] != '9' && buffer[7] != '0')
 	{
-		int n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&server, &length);
+		int n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&server, &sockLen);
 		if (n > 0) cout << buffer << endl;
+	}
+}
+
+int
+RoutingNode::Listen()
+{
+	char buffer[512];
+
+	while(1)
+	{
+		bzero(buffer,512);
+		int n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&server, &sockLen);
+		if (n > 0)
+		{
+			parser.ParseMessage(buffer, fromNode, messages);
+			ProcessMessages();
+		}
 	}
 }
 
@@ -326,7 +343,8 @@ int main(int argc, const char* argv[])
 	#endif
 
 	rnod->WaitForAllClear();
-   	
+	rnod->SendForwardingTableToNeighbors();
+   	rnod->Listen();
 
 	char converged[20];
 	sprintf(converged, "@%d~%d~ ~", rnod->myID, RoutingMessage::CONVERGED);

@@ -7,7 +7,7 @@
 // 0 : no logging
 // 1 : informational
 // 2 : debugging
-// 3 : wat somethings broke
+// 3 : wat something's broke
 #define logging 2
 
 // standard includes because I'm lazy

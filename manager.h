@@ -64,4 +64,5 @@ public:
 
 	int fromNode;
 	multimap<int, string> messages;
+	socklen_t sockLen = sizeof(struct sockaddr_in);
 };

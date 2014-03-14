@@ -25,6 +25,7 @@ public:
 	int SendForwardingTableToNeighbors();
 	int Broadcast(char* buffer);
 	int WaitForAllClear();
+	int Listen();
 
 	int myID;
 	int mySocket;
@@ -42,4 +43,6 @@ public:
 	int fromNode;
 	multimap<int, string> messages;
 	RoutingMessage parser;
+
+	socklen_t sockLen = sizeof(struct sockaddr_in);
 };

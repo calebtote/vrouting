@@ -7,6 +7,7 @@
 // 0 : no logging
 // 1 : informational
 // 2 : debugging
+// 3 : wat somethings broke
 #define logging 2
 
 // standard includes because I'm lazy
@@ -37,5 +38,7 @@
 #include <signal.h>
 
 using namespace std;
+
+typedef map<int,string, less<int> >::iterator messagesIter;
 
 const int SERVER_PORT = 7777;

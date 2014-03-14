@@ -12,7 +12,7 @@ clean:
 
 .PHONY: all clean
 
-$(BINDIR)/manager : $(BINDIR)/manager.o
+$(BINDIR)/manager : $(BINDIR)/rtngmsg.o  $(BINDIR)/manager.o
 	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
 
 $(BINDIR)/rtngnode : $(BINDIR)/rtngmsg.o $(BINDIR)/rtngnode.o

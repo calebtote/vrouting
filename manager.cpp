@@ -176,6 +176,73 @@ RoutingManager::SendMessage(struct sockaddr_in toNode, char buffer[1024])
 }
 
 int
+RoutingManager::Run()
+{
+	while(1)
+	{
+		Listen();
+	}
+}
+
+int
+RoutingManager::Listen()
+{
+	int n;
+	char buffer[512];
+	bzero(buffer,512);
+	unsigned int length = sizeof(struct sockaddr_in);
+	struct sockaddr_in from;
+	RoutingMessage parser;
+
+	#if logging > 1
+		cout << "Listening...\n";
+	#endif
+
+	n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&from, &length);
+	
+	if (n < 0) 
+		perror("recvfrom");
+	else
+	{
+		parser.ParseMessage(buffer, fromNode, messages);
+		ProcessMessages();
+	}
+}
+
+int
+RoutingManager::ProcessMessages()
+{
+	messagesIter iter = messages.begin();
+	unsigned int length = sizeof(struct sockaddr_in);
+	while(iter != messages.end())
+	{
+		switch(iter->first)
+		{
+			case RoutingMessage::HELLO: break;
+			case RoutingMessage::KEEPALIVE: break;
+			case RoutingMessage::MESSAGE: break;			
+			case RoutingMessage::REQCONINFO: break;
+			case RoutingMessage::ACKCONINFO: break;
+			case RoutingMessage::CONVERGING: break;
+			case RoutingMessage::REQNBRINFO: break;
+			case RoutingMessage::CONVERGED:
+			{
+				topology.at(fromNode).converged = true;
+				cout << fromNode << " has converged!\n";
+				break;
+			}
+			case RoutingMessage::DEBUG: break;
+			case RoutingMessage::ERROR: break;
+			default: break;
+		}
+		iter++;
+	}
+
+	//all done!
+	messages.clear();
+}
+
+int
 RoutingManager::ParseInputFile(char* filePath, const int MAX_CHARS_PER_LINE,
 							    const int MAX_TOKENS_PER_LINE, const char* const DELIMITER)
 {
@@ -291,6 +358,16 @@ int main(int argc, const char* argv[])
 	manager->Initialize();
 	manager->WaitForNewNodes();
 
+	// send all clear
+    TopologyIter topoIter = manager->topology.begin();
+	for (; topoIter != manager->topology.end(); topoIter++)
+	{
+		manager->SendMessage(topoIter->second.connection.theirAddress, "@7777~90~ ~");
+	}
+
+	// here we go!
+	manager->Run();
+
 	/*
 	manager->myConnection = new NetworkConnection(NULL, "5000");
 	
@@ -301,14 +378,15 @@ int main(int argc, const char* argv[])
 
 	cout << "\n\t**** **** ****\n";
 
-	#if logging > 1
+	#if logging > 2
 		// print the tokens
 	    for (int i = 0; i < manager->tokens.size(); i++) // n = # of tokens
 	      cout << "Token[" << i << "] = " << manager->tokens[i] << endl;
 	    cout << "\n\t**** **** ****\n";
     #endif
 
-	#if logging > 1
+
+	#if logging > 2
 		manager->PrintTopology();
 		cout << "\n\t**** **** ****\n";
 	#endif

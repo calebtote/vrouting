@@ -4,8 +4,8 @@
 #include "node.h"
 #include "rtngmsg.h"
 
-typedef map<int,string, less<int> >::iterator messagesIter;
 typedef map<int,int, less<int> >::iterator neighborsIter;
+typedef map<int, map<int,int>, less<int> >::iterator forwardingTableIter;
 
 class RoutingNode
 {
@@ -18,6 +18,14 @@ public:
 	int BindSocketToPort();
 	int CreateNeighborSocket();
 	int ProcessMessages();
+
+	int GetNeighborLinkCost(int id);
+	bool IsBetterPath(int destID, int destCost);
+	int UpdateForwardingTable(int dest, int hop, int cost);
+	int SendForwardingTableToNeighbors();
+	int Broadcast(char* buffer);
+	int WaitForAllClear();
+
 	int myID;
 	int mySocket;
 	int neighborSocket;
@@ -25,8 +33,10 @@ public:
 	struct sockaddr_in neighbor;
 
 	map<int, struct Node> topology;
+	map<int, map<int,int> > forwardingTable;
 
 	//this nodes known neighbors
+	//Neighbors:  <Destination,Cost>
 	std::map<int,int> neighbors;
 	
 	int fromNode;

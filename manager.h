@@ -30,10 +30,16 @@ public:
 	RoutingManager();
 	int Initialize(int myPort = SERVER_PORT);
 	int WaitForNewNodes();
+	int Run();
+	int Listen();
+
+
 	void GenerateConnectionString(int id, char* buf);
 	void SendNeighborInformation(struct Node n, char* buffer);
 	int SendMessage(struct sockaddr_in toNode, char buffer[1024]);
 	int GenerateVirtualNodeID(int inputNodeID);
+	int ProcessMessages();
+	
 	int ParseInputFile(char* filePath, const int MAX_CHARS_PER_LINE = 512, 
 							    const int MAX_TOKENS_PER_LINE = 20, const char* const DELIMITER = " ");
 	int AddNodeLink(int nodeID, int destNodeId, int destLinkCost);
@@ -53,6 +59,9 @@ public:
 	size_t activeNodeCount;
 
 	map<int, struct Node> topology;
-	map<int, struct Node> activeTopology;
+	//map<int, struct Node> activeTopology;
 	list<int> availableIDs;
+
+	int fromNode;
+	multimap<int, string> messages;
 };

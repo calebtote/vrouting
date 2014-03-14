@@ -6,9 +6,10 @@ typedef map<int,int, less<int> >::const_iterator NodeNeighborsIter;
 
 struct Node
 {
-	Node(){online = false;}
+	Node(){online = false; converged = false;}
 	int id;
 	bool online;
+	bool converged;
 
 	//this nodes known neighbors
 	std::map<int,int> neighbors;

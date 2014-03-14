@@ -1,4 +1,4 @@
 struct ForwardingTable
 {
-	//hm, uneeded? probably.	
+	//hm, uneeded? probably not.	
 };

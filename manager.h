@@ -10,6 +10,7 @@
 
 typedef map<int,Node, less<int> >::iterator TopologyIter;
 typedef vector<sockaddr_in>::iterator activeNodesIter;
+typedef multimap<int, string>::iterator nodeMessagesIter;
 
 bool operator == (const sockaddr_in &lhs, const sockaddr_in& rhs) {
       return lhs.sin_family == rhs.sin_family 
@@ -36,12 +37,19 @@ public:
 
 	void GenerateConnectionString(int id, char* buf);
 	void SendNeighborInformation(struct Node n, char* buffer);
+	int SendMessageMap(struct Node n);
 	int SendMessage(struct sockaddr_in toNode, char buffer[1024]);
 	int GenerateVirtualNodeID(int inputNodeID);
 	int ProcessMessages();
+
+	bool IsNetworkConverged();
+	int PassMessages();
 	
 	int ParseInputFile(char* filePath, const int MAX_CHARS_PER_LINE = 512, 
 							    const int MAX_TOKENS_PER_LINE = 20, const char* const DELIMITER = " ");
+	int ParseMessageFile(char* filePath, const int MAX_CHARS_PER_LINE = 512, 
+							    const int MAX_TOKENS_PER_LINE = 20, const char* const DELIMITER = " ");
+
 	int AddNodeLink(int nodeID, int destNodeId, int destLinkCost);
 	bool ActivateNewNode(struct sockaddr_in newNode);
 	int PopulateTopology();
@@ -61,6 +69,8 @@ public:
 	map<int, struct Node> topology;
 	//map<int, struct Node> activeTopology;
 	list<int> availableIDs;
+
+	multimap<int, string> nodeMessages;
 
 	int fromNode;
 	multimap<int, string> messages;

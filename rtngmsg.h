@@ -35,11 +35,14 @@ public:
 	{
 		HELLO = 1, //@7777~01~ ~10~hi
 		KEEPALIVE = 0,
-		MESSAGE = 10, //@7777~10~hi
+		PASSMSGS = 10, //Send trigger for message passing
+		NEWMESSAGE = 11, //@7777~11~3701.Send this message to node-3701 please!
+		FWDMESSAGE = 12, //@3703~12~3701.Send this message to node-3701 please!
 
 		NEWNODE = 15, //@7777~15~3701 :: Your Node ID is 3701
 		REQCONINFO = 16, //@3701~16~3702 :: Give me node 3702 connection info
 		ACKCONINFO = 17, //@7777~17~3702.hostname.port
+		LSP = 18,
 		CONVERGING = 20,
 		LINKADD = 21, //@7777~21~3702.11 :: Connected to 3702 with cost 11
 		LINKUPDATE = 22, //same as above, just with code 22

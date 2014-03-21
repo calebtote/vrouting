@@ -137,7 +137,8 @@ RoutingNode::GetMyNeighbors()
 	while (buffer[6] != '2' && buffer[7] != '1')
 	{
 		n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&server, &length);
-		if (n > 0) cout << buffer << endl;
+		//commented out for code submission
+		//if (n > 0) cout << buffer << endl;
 	}
 
 	fcntl(mySocket, F_SETFL, ~O_NONBLOCK);
@@ -149,7 +150,8 @@ RoutingNode::GetMyNeighbors()
 		perror("recvfrom");
 }
 
-int
+//TODO: Seriously need some better tokenizing
+bool
 RoutingNode::ProcessMessages()
 {
 	messagesIter iter = messages.begin();
@@ -160,7 +162,76 @@ RoutingNode::ProcessMessages()
 		{
 			case RoutingMessage::HELLO: break;
 			case RoutingMessage::KEEPALIVE: break;
-			case RoutingMessage::MESSAGE: break;
+			case RoutingMessage::PASSMSGS: 
+			{
+				messagesToSendIter it = messagesToSend.begin();
+				while(it != messagesToSend.end())
+				{
+					neighbor.sin_port = forwardingTable.at(it->first).begin()->first;
+					char *cstr = new char[it->second.length() + 1];
+					strcpy(cstr, it->second.c_str());
+					char buf[512];
+					sprintf(buf, "@%d~%d~%d.from %d to %d hops %d.%s", 
+								myID, RoutingMessage::FWDMESSAGE, it->first, myID-3700, 
+								(it->first)-3700, myID-3700, cstr);
+					SendMessage(neighbor, buf);
+					it++;
+				}
+				break;
+			}
+			case RoutingMessage::NEWMESSAGE:
+			{
+				int destID;
+				string message;
+				string buf(iter->second);
+				string delim = ".";
+				destID = atoi(buf.substr(0, buf.find(delim)).c_str());
+				buf.erase(0, buf.find(delim) + delim.length());
+				message = buf.substr(0, buf.find(delim));
+				messagesToSend.insert(pair<int,string>(destID, message));
+
+				#if logging > 1
+					cout << "Message Added: " << destID << "." << message<< endl;
+				#endif
+				break;
+			}
+			case RoutingMessage::FWDMESSAGE:
+			{
+				//Message Format:
+				//@FromNode~12~DestNode.from x to y hops .<the message>
+				int destID;
+				string changableStr, finalMessage;
+				string buf(iter->second);
+				string delim = ".";
+				destID = atoi(buf.substr(0, buf.find(delim)).c_str());
+				buf.erase(0, buf.find(delim) + delim.length());
+
+				changableStr = buf.substr(0, buf.find(delim));
+
+				stringstream sstm;
+				sstm << changableStr << " " << myID-3700;
+				changableStr = sstm.str();
+				buf.erase(0, buf.find(delim) + delim.length());
+
+				string theMsg = buf.substr(0, buf.find(delim));
+
+				stringstream sstm2;
+				sstm2 << changableStr << "." << theMsg;
+				finalMessage = sstm2.str();				
+	
+				if(destID != myID)
+				{
+					neighbor.sin_port = forwardingTable.at(destID).begin()->first;				
+					char *cstr = new char[finalMessage.length() + 1];
+					strcpy(cstr, finalMessage.c_str());
+					char buf[512];
+					sprintf(buf, "@%d~%d~%d.%s", myID, RoutingMessage::FWDMESSAGE, destID, cstr);
+					SendMessage(neighbor, buf);
+				}
+
+				PrintMessage(finalMessage);
+				break;
+			}
 			case RoutingMessage::NEWNODE: 
 			{
 				myID = atoi(iter->second.c_str());
@@ -169,7 +240,7 @@ RoutingNode::ProcessMessages()
 			} break;			
 			case RoutingMessage::REQCONINFO: break;
 			case RoutingMessage::ACKCONINFO: break;
-			case RoutingMessage::CONVERGING: break;
+			case RoutingMessage::CONVERGING: break;			
 			case RoutingMessage::LINKADD: 
 			{
 				int destID, destCost;
@@ -179,11 +250,10 @@ RoutingNode::ProcessMessages()
 				buf.erase(0, buf.find(delim) + delim.length());
 				destCost = atoi(buf.substr(0, buf.find(delim)).c_str());
 
-				#if logging > 1
-					cout << "Adding " << destID << "|" << destCost << endl;
-				#endif
+				cout << "now linked to node " << destID-3700 << " with cost " << destCost << endl;
 
 				neighbors.insert(pair<int,int>(destID, destCost));
+				UpdateForwardingTable(destID, destID, destCost);
 			} break;
 			case RoutingMessage::LINKUPDATE: break;
 			case RoutingMessage::VECTOR:
@@ -195,10 +265,10 @@ RoutingNode::ProcessMessages()
 				buf.erase(0, buf.find(delim) + delim.length());
 				destCost = atoi(buf.substr(0, buf.find(delim)).c_str());
 
-				if( IsBetterPath(destID, destCost + GetNeighborLinkCost(fromNode)) )
+				if( IsNewNode(destID) ||
+					IsBetterPath(destID, destCost + GetNeighborLinkCost(fromNode)) )
 				{
-					UpdateForwardingTable(destID, fromNode, GetNeighborLinkCost(fromNode));
-					SendForwardingTableToNeighbors();
+					UpdateForwardingTable(destID, fromNode, destCost + GetNeighborLinkCost(fromNode));
 				}
 			}
 			case RoutingMessage::REQNBRINFO: break;
@@ -210,9 +280,31 @@ RoutingNode::ProcessMessages()
 		iter++;
 	}
 
-	//all done!
-	messages.clear();
+	//TEMPORARY - FIX THIS
+	return false;
 }
+
+int
+RoutingNode::PrintMessage(string msg)
+{
+	string buf(msg);
+	string delim = ".";
+	string header = buf.substr(0, buf.find(delim));
+	buf.erase(0, buf.find(delim) + delim.length());
+	string footer = buf.substr(0, buf.find(delim));
+
+	cout << header << " message " << footer << endl;
+}
+
+int
+RoutingNode::AppendMyID(string &theMessage)
+{
+
+}
+
+bool
+RoutingNode::IsNewNode(int id)
+{ return forwardingTable.find(id) == forwardingTable.end(); }
 
 int
 RoutingNode::GetNeighborLinkCost(int id)
@@ -220,38 +312,44 @@ RoutingNode::GetNeighborLinkCost(int id)
 
 bool
 RoutingNode::IsBetterPath(int destID, int destCost)
-{
-	cout << "Dest: " << destID << endl;
-	cout << "Cost: " << destCost << endl;
-	return true;
-}
+{ return forwardingTable.at(destID).begin()->second > destCost; }
 
 int
 RoutingNode::UpdateForwardingTable(int dest, int hop, int cost)
 {
+	if(!IsNewNode(dest))
+		forwardingTable.erase(dest);
+
 	forwardingTable[dest][hop] = cost;
+	//cin.get();
 
 	forwardingTableIter iter = forwardingTable.begin();	
 	#if logging > 1
 		cout << "\t\t\t*** Forwarding Table Updated! ***\n";
 		while(iter != forwardingTable.end())
 		{
-			cout << "\t\t\tDest: " << iter->first << "\tHop: " << iter->second[0] << "\tCost: " << iter->second[1] << endl << "   ***   \n";
+			map<int,int, less<int> >::iterator inner_it = iter->second.begin();
+			cout << "\t\t\tDest: " << iter->first << "\tHop: " << inner_it->first << "\tCost: " << inner_it->second << endl << "   ***   \n";
 			iter++;
 		}
 	#else
 		while(iter != forwardingTable.end())
 		{
-			cout << iter->first << iter->second[0] << iter->second[1] << endl;
+			map<int,int, less<int> >::iterator inner_it = iter->second.begin();
+			cout << iter->first << " " << inner_it->first << " " << inner_it->second << endl;
 			iter++;
 		}
+		cout << endl << endl;
 	#endif
+
+	forwardingTableUpdated = true;
 }
 
 int
 RoutingNode::SendForwardingTableToNeighbors()
 {
 	forwardingTableIter iter = forwardingTable.begin();
+	map<int,int, less<int> >::iterator inner_it = iter->second.begin();
 	if (iter != forwardingTable.end())
 	{
 		char buffer[512];
@@ -260,19 +358,18 @@ RoutingNode::SendForwardingTableToNeighbors()
 		char hop[5];
 		char cost[5];
 		snprintf(dest, sizeof(dest), "%d", iter->first);
-		snprintf(hop, sizeof(hop), "%d", iter->second[0]);
-		snprintf(cost, sizeof(cost), "%d", iter->second[1]);
-		sprintf(buffer, "@%d~%d~%s.%s.%s", myID, RoutingMessage::VECTOR, dest, hop, cost);
+		snprintf(cost, sizeof(cost), "%d", inner_it->second);
+		sprintf(buffer, "@%d~%d~%s.%s", myID, RoutingMessage::VECTOR, dest, cost);
 
 		iter++;
 		while (iter != forwardingTable.end())
 		{	
+			inner_it = iter->second.begin();
 			snprintf(dest, sizeof(dest), "%d", iter->first);
-			snprintf(hop, sizeof(hop), "%d", iter->second[0]);
-			snprintf(cost, sizeof(cost), "%d", iter->second[1]);
+			snprintf(cost, sizeof(cost), "%d", inner_it->second);
 			
 			char temp[20];
-			sprintf(temp, "~%d~%s.%s.%s", RoutingMessage::VECTOR, dest, hop, cost);
+			sprintf(temp, "~%d~%s.%s", RoutingMessage::VECTOR, dest, cost);
 			strcat(buffer,temp);
 			iter++;
 		}
@@ -287,7 +384,10 @@ RoutingNode::Broadcast(char* buffer)
 	neighborsIter nbrIter = neighbors.begin();
 	while(nbrIter != neighbors.end())
 	{
-		cout << "Broadcasting!\n";
+		#if logging > 1
+			cout << "Broadcasting!\n";
+		#endif
+
 		neighbor.sin_port = nbrIter->first;
 		SendMessage(neighbor, buffer);
 		nbrIter++;
@@ -304,19 +404,72 @@ RoutingNode::WaitForAllClear()
 	while (buffer[6] != '9' && buffer[7] != '0')
 	{
 		int n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&server, &sockLen);
-		if (n > 0) cout << buffer << endl;
+		/*commented out for code submission
+		if (n > 0)
+		{ cout << buffer << endl; }*/
 	}
+}
+
+int
+RoutingNode::InitializeForwardingTableConnections()
+{
+	char buffer[512];
+
+	/* Temporary fix. 
+	/* This should be abstracted, and more widely used
+	/********* Start Select() ***********/
+	fd_set readfds;
+	struct timeval tv;
+	tv.tv_sec = 1;
+	tv.tv_usec = 500000;	//wait for 1.5 second here
+
+	int rv = 1;
+
+	// clear the set ahead of time
+	FD_ZERO(&readfds);
+
+	// add our descriptors to the set
+	FD_SET(mySocket, &readfds);
+
+	// the n param for select()
+	int n = mySocket + 1;
+	/********* End Select() ***********/
+
+	while(rv != 0)
+	{
+		rv = select(n, &readfds, NULL, NULL, &tv);
+
+		if (rv == -1)
+			perror("select"); // error occurred in select()
+
+		bzero(buffer,512);
+		int n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&neighbor, &sockLen);
+		if (n > 0)
+		{
+			parser.ParseMessage(buffer, fromNode, messages);
+			ProcessMessages();
+		}
+	}
+
+	char converged[20];
+	sprintf(converged, "@%d~%d~ ~", myID, RoutingMessage::CONVERGED);
+	SendMessage(server, converged);
+
+	return 0;
 }
 
 int
 RoutingNode::Listen()
 {
 	char buffer[512];
+	#if logging > 1
+		cout << "\n\n\t\t*** Listening... ***\n\n";
+	#endif
 
 	while(1)
 	{
 		bzero(buffer,512);
-		int n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&server, &sockLen);
+		int n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&neighbor, &sockLen);
 		if (n > 0)
 		{
 			parser.ParseMessage(buffer, fromNode, messages);
@@ -325,7 +478,7 @@ RoutingNode::Listen()
 	}
 }
 
-/**/
+/*
 int main(int argc, const char* argv[])
 {
 	RoutingNode *rnod = new RoutingNode();
@@ -344,21 +497,8 @@ int main(int argc, const char* argv[])
 
 	rnod->WaitForAllClear();
 	rnod->SendForwardingTableToNeighbors();
+	rnod->InitializeForwardingTableConnections();
    	rnod->Listen();
-
-	char converged[20];
-	sprintf(converged, "@%d~%d~ ~", rnod->myID, RoutingMessage::CONVERGED);
-	rnod->SendMessage(rnod->server, converged);
-
-
-    /*
-	rnod->myConnection = new NetworkConnection("localhost", "5000");
-
-	rnod->myConnection->SetSocketHints();
-	rnod->myConnection->PopulateAddressInfo();
-	rnod->myConnection->BindSocket();
-
-	*/
 
 	return 0;
 }/**/

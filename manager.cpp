@@ -155,6 +155,24 @@ RoutingManager::SendNeighborInformation(struct Node n, char* buffer)
 }
 
 int
+RoutingManager::SendMessageMap(struct Node n)
+{
+	string theMsg = "";
+	nodeMessagesIter iter = nodeMessages.begin();
+
+	while (iter != nodeMessages.end())
+	{
+		if(iter->first == n.id)
+		{
+			char *tmp = new char[iter->second.length() + 1];
+			strcpy(tmp, iter->second.c_str());
+			SendMessage(n.connection.theirAddress, tmp);
+		}
+		iter++;
+	}
+}
+
+int
 RoutingManager::SendMessage(struct sockaddr_in toNode, char buffer[1024])
 {
 	#if logging > 1
@@ -187,24 +205,108 @@ RoutingManager::Run()
 int
 RoutingManager::Listen()
 {
-	int n;
 	char buffer[512];
 	bzero(buffer,512);
 	struct sockaddr_in from;
+	string input;
 	RoutingMessage parser;
 
-	#if logging > 1
-		cout << "Listening...\n";
-	#endif
+	cout << "Listening...\n";
 
-	n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&from, &sockLen);
-	
-	if (n < 0) 
-		perror("recvfrom");
-	else
+		/* Temporary fix. 
+	/* This should be abstracted, and more widely used
+	/********* Start Select() ***********/
+	fd_set readfds;
+	struct timeval tv;
+	tv.tv_sec = 120;
+	tv.tv_usec = 0;	//wait for 1.5 second here
+
+	int rv = 1;
+
+	// clear the set ahead of time
+	FD_ZERO(&readfds);
+
+	// add our descriptors to the set
+	FD_SET(mySocket, &readfds);
+	FD_SET(STDIN, &readfds);
+
+	// the n param for select()
+	int n = mySocket + 1;
+	/********* End Select() ***********/
+
+	while(rv != 0)
 	{
-		parser.ParseMessage(buffer, fromNode, messages);
-		ProcessMessages();
+		// clear the set ahead of time
+		FD_ZERO(&readfds);
+
+		// add our descriptors to the set
+		FD_SET(mySocket, &readfds);
+		FD_SET(STDIN, &readfds);
+
+		rv = select(n, &readfds, NULL, NULL, &tv);
+
+		if (rv == -1)
+			perror("select"); // error occurred in select()
+
+		if (FD_ISSET(STDIN, &readfds))
+        {
+        		cin >> input;
+        		cout << input << endl;
+        }
+        else
+        {
+			bzero(buffer,512);
+			int n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&from, &sockLen);
+
+			if (n < 0) 
+				perror("recvfrom");
+
+			if (n > 0)
+			{
+				parser.ParseMessage(buffer, fromNode, messages);
+				ProcessMessages();
+			}
+		}
+
+		if(IsNetworkConverged())
+		{
+			for(TopologyIter it = topology.begin(); it != topology.end(); it++)
+				SendMessageMap(it->second);
+			
+			PassMessages();
+		}
+	}
+
+//	n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&from, &sockLen);
+}
+
+bool
+RoutingManager::IsNetworkConverged()
+{
+	TopologyIter iter = topology.begin();
+	while(iter != topology.end())
+	{
+		if (!iter->second.converged)
+			return false;
+
+		iter++;
+	}
+
+	return true;
+}
+
+int
+RoutingManager::PassMessages()
+{
+	TopologyIter iter = topology.begin();
+	while(iter != topology.end())
+	{
+		char buffer[512];
+		bzero(buffer,512);
+
+		sprintf(buffer, "@%d~%d~ ~", SERVER_PORT, RoutingMessage::PASSMSGS);
+		SendMessage(iter->second.connection.theirAddress, buffer);
+		iter++;
 	}
 }
 
@@ -219,7 +321,8 @@ RoutingManager::ProcessMessages()
 		{
 			case RoutingMessage::HELLO: break;
 			case RoutingMessage::KEEPALIVE: break;
-			case RoutingMessage::MESSAGE: break;			
+			case RoutingMessage::PASSMSGS: break;
+			case RoutingMessage::NEWMESSAGE: break;			
 			case RoutingMessage::REQCONINFO: break;
 			case RoutingMessage::ACKCONINFO: break;
 			case RoutingMessage::CONVERGING: break;
@@ -250,7 +353,7 @@ RoutingManager::ParseInputFile(char* filePath, const int MAX_CHARS_PER_LINE,
 
 	if(!theFile.good())
 	{
-		cout << "Input File Not Found.\n";
+		cout << "Topology File Not Found.\n";
 		return 1;
 	}
 
@@ -268,9 +371,52 @@ RoutingManager::ParseInputFile(char* filePath, const int MAX_CHARS_PER_LINE,
 		}
 	}while (!theFile.eof());
 
-
+	theFile.close();
 
 	return 0;
+}
+
+int
+RoutingManager::ParseMessageFile(char* filePath, const int MAX_CHARS_PER_LINE,
+							    const int MAX_TOKENS_PER_LINE, const char* const DELIMITER)
+{
+	ifstream theFile;
+	theFile.open(filePath);
+	char buf[MAX_CHARS_PER_LINE];
+
+	if(!theFile.good())
+	{
+		cout << "Message File Not Found.\n";
+		return 1;
+	}
+
+	while (theFile.getline(buf, MAX_CHARS_PER_LINE))
+	{
+		char *temp, *theMsg;
+		int from;
+		int to;
+
+		temp = strtok(buf, DELIMITER);
+		istringstream(temp) >> from;
+
+		temp = strtok(NULL, DELIMITER);
+		istringstream(temp) >> to;
+
+		from = GenerateVirtualNodeID(from);
+		to = GenerateVirtualNodeID(to);
+
+		theMsg = strtok(NULL, "\n");
+
+		char b[MAX_CHARS_PER_LINE];
+		sprintf(b, "@%d~%d~%d.%s", SERVER_PORT, RoutingMessage::NEWMESSAGE, to, theMsg);
+		nodeMessages.insert(pair<int,string>(from, b));
+
+		#if logging > 1
+			cout << "Message Stored: " << from << "|" << b << endl;
+		#endif
+	}
+
+	theFile.close();
 }
 
 int
@@ -350,8 +496,9 @@ RoutingManager::PrintTopology()
 int main(int argc, const char* argv[])
 {
 	RoutingManager *manager = new RoutingManager();
-	manager->ParseInputFile("topo.txt", 10, 3, " ");
+	manager->ParseInputFile("topoA.txt", 10, 3, " ");
 	manager->PopulateTopology();
+	manager->ParseMessageFile("msg.txt");
 	cout << "\n\t**** **** ****\n";
 
 	manager->Initialize();

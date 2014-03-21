@@ -7,8 +7,10 @@
 // 0 : no logging
 // 1 : informational
 // 2 : debugging
-// 3 : wat something's broke
-#define logging 2
+// 3 : give me er'thang
+#define logging 3
+
+#define STDIN 0
 
 // standard includes because I'm lazy
 // this is so bad...

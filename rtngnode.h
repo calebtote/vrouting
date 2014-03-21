@@ -6,10 +6,12 @@
 
 typedef map<int,int, less<int> >::iterator neighborsIter;
 typedef map<int, map<int,int>, less<int> >::iterator forwardingTableIter;
+typedef multimap<int,string>::iterator messagesToSendIter;
 
 class RoutingNode
 {
 public:
+	RoutingNode(){forwardingTableUpdated = false; topologyUpdated = false;}
 	int Initialize(const char* theManager);
 	int SendMessage(struct sockaddr_in toNode, char buffer[512]);
 	//NetworkConnection *myConnection;
@@ -17,14 +19,18 @@ public:
 	int GetMyNeighbors();
 	int BindSocketToPort();
 	int CreateNeighborSocket();
-	int ProcessMessages();
+	virtual bool ProcessMessages();
+	int AppendMyID(string &theMessage);
+	int PrintMessage(string theMessage);
 
 	int GetNeighborLinkCost(int id);
+	bool IsNewNode(int destID);
 	bool IsBetterPath(int destID, int destCost);
 	int UpdateForwardingTable(int dest, int hop, int cost);
 	int SendForwardingTableToNeighbors();
 	int Broadcast(char* buffer);
 	int WaitForAllClear();
+	int InitializeForwardingTableConnections();
 	int Listen();
 
 	int myID;
@@ -33,7 +39,7 @@ public:
 	struct sockaddr_in server;
 	struct sockaddr_in neighbor;
 
-	map<int, struct Node> topology;
+	//destination | hop, cost
 	map<int, map<int,int> > forwardingTable;
 
 	//this nodes known neighbors
@@ -41,7 +47,10 @@ public:
 	std::map<int,int> neighbors;
 	
 	int fromNode;
+	bool forwardingTableUpdated;
+	bool topologyUpdated;
 	multimap<int, string> messages;
+	multimap<int, string> messagesToSend;
 	RoutingMessage parser;
 
 	socklen_t sockLen = sizeof(struct sockaddr_in);

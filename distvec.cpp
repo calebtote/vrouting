@@ -6,15 +6,6 @@ DistanceVectorNode::ProcessMessages()
 	if(RoutingNode::ProcessMessages())
 		return true;
 
-	messagesIter iter = messages.begin();
-	unsigned int length = sizeof(struct sockaddr_in);
-	while(iter != messages.end())
-	{
-		switch(iter->first)
-		{
-		}
-	}
-
 	if(forwardingTableUpdated)
 		SendForwardingTableToNeighbors();
 
@@ -26,7 +17,7 @@ int main(int argc, const char* argv[])
 {
 	DistanceVectorNode *dvNode = new DistanceVectorNode();
 
-	dvNode->Initialize("localhost");	
+	dvNode->Initialize(argv[1]);	
 	dvNode->GetMyID();
 	dvNode->GetMyNeighbors();
 
@@ -40,6 +31,7 @@ int main(int argc, const char* argv[])
 	#endif
 
 	dvNode->WaitForAllClear();
+	dvNode->RequestNeighborConnectionInfo();
 	dvNode->SendForwardingTableToNeighbors();
 	dvNode->InitializeForwardingTableConnections();
    	dvNode->Listen();

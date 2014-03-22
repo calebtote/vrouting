@@ -5,6 +5,6 @@
 struct NodeConnection
 {
 	struct sockaddr_in theirAddress; 
-	const char* ipstr;
+	string ipstr;
 	unsigned short int port;
 };

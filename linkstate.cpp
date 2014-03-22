@@ -14,6 +14,9 @@ LinkStateNode::ProcessMessages()
 		{
 			case RoutingMessage::LSP: 
 			{
+				//just some interesting info
+				lspCount++;
+
 				int node, neighbor, cost;
 				string buf(iter->second);
 				string nodeCostDelim = ".";	
@@ -59,7 +62,7 @@ LinkStateNode::ProcessMessages()
 				}while(buf.find(nodeViewDelim) != -1);
 
 				#if logging > 1
-					cout << "\t\t*** LSP Received! ***\n";
+					cout << "\t\t*** LSP Received! ***\n\t\t---Count: " << lspCount << endl;
 					if(topologyUpdated)
 					{
 						cout << "\n\t*** Printing Topology ***\n";
@@ -171,22 +174,75 @@ LinkStateNode::FloodLSPs()
 	}
 }
 
+int
+LinkStateNode::InitializeForwardingTableConnections()
+{
+	char buffer[512];
+
+	/* Temporary fix. 
+	/* This should be abstracted, and more widely used
+	/********* Start Select() ***********/
+	fd_set readfds;
+	struct timeval tv;
+	tv.tv_sec = 2;
+	tv.tv_usec = 0;	//wait for 2 second here
+
+	int rv = 1;
+
+	// clear the set ahead of time
+	FD_ZERO(&readfds);
+
+	// add our descriptors to the set
+	FD_SET(mySocket, &readfds);
+
+	// the n param for select()
+	int n = mySocket + 1;
+	/********* End Select() ***********/
+
+	while(rv != 0)
+	{
+		rv = select(n, &readfds, NULL, NULL, &tv);
+
+		if (rv == -1)
+			perror("select"); // error occurred in select()
+
+		bzero(buffer,512);
+		int n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&neighbor, &sockLen);
+		if (n > 0)
+		{
+			parser.ParseMessage(buffer, fromNode, messages);
+			ProcessMessages();
+		}
+	}
+
+	Dijkstra(topology);
+
+	char converged[20];
+	sprintf(converged, "@%d~%d~ ~", myID, RoutingMessage::CONVERGED);
+	SendMessage(server, converged);
+
+	return 0;
+}
+
 //Map is formated as:
 //<Node, Their Neighbor, Link Cost>
-int Dijkstra(multimap<int,map<int, int> > topo, int source)
+int 
+LinkStateNode::Dijkstra(map<int,map<int, int> > topo)
 {
-	multimap<int,map<int, int> >::iterator it = topo.begin();
-	while(it != topo.end())
-	{
-		cout << "\tNode: " << it->first << " connected to:";
-		map<int,int, less<int> >::iterator inner_it = it->second.begin();
-		while(inner_it != it->second.end())
+	map<int,map<int, int> >::iterator it = topo.begin();
+	#if logging > 2
+		while(it != topo.end())
 		{
-			cout << "--" << inner_it->first << " with cost: " << inner_it->second << endl;
-			inner_it++;
+			cout << "\tNode: " << it->first << " connected to:";
+			map<int,int, less<int> >::iterator inner_it = it->second.begin();
+			while(inner_it != it->second.end())
+			{
+				cout << "--" << inner_it->first << " with cost: " << inner_it->second << endl;
+				inner_it++;
+			}
+			it++;
 		}
-		it++;
-	}
+	#endif
 
 	map<int,int> distance;
 	map<int,int> previous;
@@ -202,17 +258,18 @@ int Dijkstra(multimap<int,map<int, int> > topo, int source)
 		distance[it->first] = 9999;
 		previous[it->first] = -1;
 		nodes.insert(it->first);
-		cout << "Processed: " << it->first << endl;
 		it++;
 	}
 
-	distance[source] = 0;
-	distance[101] = 8;
-	distance[105] = 4;
-	distance[103] = 3;
-	previous[101] = 102;
-	previous[105] = 102;
-	previous[103] = 102;
+	distance[myID] = 0;
+
+	neighborsIter nbrIt = neighbors.begin();
+	while(nbrIt != neighbors.end())
+	{
+		distance[nbrIt->first] = nbrIt->second;
+		previous[nbrIt->first] = myID;
+		nbrIt++;
+	}
 
 	while(!nodes.empty())
 	{
@@ -228,7 +285,10 @@ int Dijkstra(multimap<int,map<int, int> > topo, int source)
 			}
 		}
 
-		cout << "MIN: " << curNode << "|wtih cost|" << minVal << endl;
+		#if logging > 2
+			cout << "Current Node: " << curNode << " -- wtih path cost -- " << minVal << endl;
+		#endif
+
 		nodes.erase(curNode);
 
 		if(distance.at(curNode) == 9999)
@@ -245,15 +305,22 @@ int Dijkstra(multimap<int,map<int, int> > topo, int source)
 				while(inner_it != t->second.end())
 				{
 					int x = distance[curNode] + inner_it->second;
-					cout << "node: " << t->second.begin()->first << " with total cost: " << x << endl;
+					
+					#if logging > 2
+						cout << "\t->Neighbor: " << t->second.begin()->first << " with link cost: " << x << endl;
+					#endif
+
 					if(x < distance[inner_it->first])
 					{
 						distance[inner_it->first] = x;
-						previous[inner_it->first] = curNode;						
-						cout << "distance to {" << inner_it->first << "} --> " << distance[inner_it->first] << endl;
-						cout << "previous hop {" << previous[inner_it->first] << "}\n";
+						previous[inner_it->first] = curNode;
+
+						#if logging > 2						
+							cout << "\t-->Distance to {" << inner_it->first << "} : " << distance[inner_it->first] << endl;
+							cout << "\t\t->Previous Hop {" << previous[inner_it->first] << "}\n";
+						#endif
 					}
-					cin.get();
+				//	cin.get();
 					inner_it++;
 				}
 			}
@@ -261,14 +328,14 @@ int Dijkstra(multimap<int,map<int, int> > topo, int source)
 	}
 
 	vector<int> path;
-	int p = 101;
-	path.push_back(101);
-	while(p != source)
+	int p = 3701;
+	path.push_back(3701);
+	while(p != myID)
 	{
 		cout << "previous[" << p << "]: " << previous[p] << endl;
 		p = previous[p];
 		path.push_back(p);
-		cin.get();
+		//cin.get();
 	}
 
 	vector<int>::reverse_iterator pIter = path.rbegin();
@@ -284,8 +351,8 @@ int Dijkstra(multimap<int,map<int, int> > topo, int source)
 int main(int argc, const char* argv[])
 {
 
-	/* Dijkstra Test 
-	multimap<int, map<int,int> > topology;
+	/* Dijkstra Test /*
+	map<int, map<int,int> > topology;
 	
 	//Node's neighbor | cost
 	map<int, int> t;
@@ -329,13 +396,14 @@ int main(int argc, const char* argv[])
 	topology.insert(pair<int, map<int, int> >(105, t));
 	t.clear();
 
-	Dijkstra(topology, 102);
+	LinkStateNode *lsNode = new LinkStateNode();
+	lsNode->Dijkstra(topology);
 	return 0;
-	*/
+	/**/
 
 	LinkStateNode *lsNode = new LinkStateNode();
 
-	lsNode->Initialize("localhost");	
+	lsNode->Initialize(argv[1]);	
 	lsNode->GetMyID();
 	lsNode->GetMyNeighbors();
 
@@ -349,10 +417,12 @@ int main(int argc, const char* argv[])
 	#endif
 
 	lsNode->WaitForAllClear();
+	lsNode->RequestNeighborConnectionInfo();
 	lsNode->GenerateLSP();
 	lsNode->FloodLSPs();
-
+	lsNode->InitializeForwardingTableConnections();
    	lsNode->Listen();
 
 	return 0;
+	/**/
 }

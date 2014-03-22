@@ -18,7 +18,6 @@ public:
 	int GetMyID();
 	int GetMyNeighbors();
 	int BindSocketToPort();
-	int CreateNeighborSocket();
 	virtual bool ProcessMessages();
 	int AppendMyID(string &theMessage);
 	int PrintMessage(string theMessage);
@@ -30,7 +29,8 @@ public:
 	int SendForwardingTableToNeighbors();
 	int Broadcast(char* buffer);
 	int WaitForAllClear();
-	int InitializeForwardingTableConnections();
+	int RequestNeighborConnectionInfo();
+	virtual int InitializeForwardingTableConnections();
 	int Listen();
 
 	int myID;
@@ -44,7 +44,8 @@ public:
 
 	//this nodes known neighbors
 	//Neighbors:  <Destination,Cost>
-	std::map<int,int> neighbors;
+	map<int,int> neighbors;
+	map<int,string> neighborConnectionInfo;
 	
 	int fromNode;
 	bool forwardingTableUpdated;

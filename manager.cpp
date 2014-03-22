@@ -93,6 +93,7 @@ RoutingManager::ActivateNewNode(struct sockaddr_in newNode)
 				cout << "Connected Activated!\n";
 				cout << "Node ID: " << iter->second.id << endl;
 				cout << "Node Port: " << iter->second.connection.port << endl;
+				cout << "Address: " << iter->second.connection.ipstr << endl;
 			#endif
 
 			activeNodes.push_back(newNode);
@@ -323,7 +324,19 @@ RoutingManager::ProcessMessages()
 			case RoutingMessage::KEEPALIVE: break;
 			case RoutingMessage::PASSMSGS: break;
 			case RoutingMessage::NEWMESSAGE: break;			
-			case RoutingMessage::REQCONINFO: break;
+			case RoutingMessage::REQCONINFO: 
+			{
+				istringstream buffer(iter->second);
+				int value;
+				buffer >> value;
+				string ip = topology.at(value).connection.ipstr;
+				cout << "id:" << topology.at(value).id << endl;
+
+				char b[512];
+				bzero(b,512);
+				sprintf(b, "@%d~%d~%d.%s", SERVER_PORT, RoutingMessage::ACKCONINFO, value, ip.c_str());
+				SendMessage(topology.at(fromNode).connection.theirAddress, b);
+			}break;
 			case RoutingMessage::ACKCONINFO: break;
 			case RoutingMessage::CONVERGING: break;
 			case RoutingMessage::REQNBRINFO: break;
@@ -496,7 +509,7 @@ RoutingManager::PrintTopology()
 int main(int argc, const char* argv[])
 {
 	RoutingManager *manager = new RoutingManager();
-	manager->ParseInputFile("topoA.txt", 10, 3, " ");
+	manager->ParseInputFile("topo.txt", 10, 3, " ");
 	manager->PopulateTopology();
 	manager->ParseMessageFile("msg.txt");
 	cout << "\n\t**** **** ****\n";

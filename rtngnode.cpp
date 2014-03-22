@@ -71,32 +71,12 @@ RoutingNode::BindSocketToPort()
 }
 
 int
-RoutingNode::CreateNeighborSocket()
-{
-	int length, n;
-   
-  	neighborSocket = socket(AF_INET, SOCK_DGRAM, 0);
-   	if (neighborSocket < 0) 
-   		perror("Opening socket");
-
-   	length = sizeof(neighbor);
-   	bzero(&neighbor,length);
-
-   	neighbor.sin_family = AF_INET;
-   	neighbor.sin_addr.s_addr = INADDR_ANY;
-   	neighbor.sin_port = myID;
-
-   	if (bind(neighborSocket,(struct sockaddr *)&neighbor,length) < 0) 
-    	perror("binding");
-
-    #if logging > 1
-    	cout << "Socket Created: " << neighborSocket << ":" << neighbor.sin_port << endl;
-    #endif
-}
-
-int
 RoutingNode::GetMyID()
 {
+	#if logging > 1
+		cout << "Getting Id...\n";
+	#endif
+
 	int n;
 	char buffer[512];
 	bzero(buffer,512);
@@ -115,15 +95,15 @@ RoutingNode::GetMyID()
 
 	parser.ParseMessage(buffer, fromNode, messages);
 	ProcessMessages();
-
-	//once we have our information from the manager, let's hog some cpu
-	//remove this crap when stuff gets more reliable
-	//fcntl(mySocket, F_SETFL, O_NONBLOCK);
 }
 
 int
 RoutingNode::GetMyNeighbors()
 {
+	#if logging > 1
+		cout << "Getting neighbors...\n";
+	#endif
+
 	unsigned int length = sizeof(neighbor);
 	char buffer[512];
 	bzero(buffer,512);
@@ -136,7 +116,7 @@ RoutingNode::GetMyNeighbors()
 	//replace with message-type parser at some point
 	while (buffer[6] != '2' && buffer[7] != '1')
 	{
-		n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&server, &length);
+		n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&neighbor, &length);
 		//commented out for code submission
 		//if (n > 0) cout << buffer << endl;
 	}
@@ -168,6 +148,7 @@ RoutingNode::ProcessMessages()
 				while(it != messagesToSend.end())
 				{
 					neighbor.sin_port = forwardingTable.at(it->first).begin()->first;
+					inet_pton(AF_INET, neighborConnectionInfo[forwardingTable.at(it->first).begin()->first].c_str(), &(neighbor.sin_addr));
 					char *cstr = new char[it->second.length() + 1];
 					strcpy(cstr, it->second.c_str());
 					char buf[512];
@@ -221,7 +202,8 @@ RoutingNode::ProcessMessages()
 	
 				if(destID != myID)
 				{
-					neighbor.sin_port = forwardingTable.at(destID).begin()->first;				
+					neighbor.sin_port = forwardingTable.at(destID).begin()->first;		
+					inet_pton(AF_INET, neighborConnectionInfo[destID].c_str(), &(neighbor.sin_addr));
 					char *cstr = new char[finalMessage.length() + 1];
 					strcpy(cstr, finalMessage.c_str());
 					char buf[512];
@@ -239,7 +221,19 @@ RoutingNode::ProcessMessages()
 				UpdateForwardingTable(myID, myID, 0);
 			} break;			
 			case RoutingMessage::REQCONINFO: break;
-			case RoutingMessage::ACKCONINFO: break;
+			case RoutingMessage::ACKCONINFO: 
+			{			
+				int neighborNode;	
+				string buf(iter->second);
+				string delim = ".";	
+				neighborNode = atoi(buf.substr(0, buf.find(delim)).c_str());
+				buf.erase(0, buf.find(delim) + delim.length());
+				
+				neighborConnectionInfo[neighborNode] = buf;
+				#if logging > 1
+					cout << "Neighbor: " << neighborNode << "|| " << neighborConnectionInfo[neighborNode] << endl;
+				#endif
+			}break;
 			case RoutingMessage::CONVERGING: break;			
 			case RoutingMessage::LINKADD: 
 			{
@@ -336,7 +330,7 @@ RoutingNode::UpdateForwardingTable(int dest, int hop, int cost)
 		while(iter != forwardingTable.end())
 		{
 			map<int,int, less<int> >::iterator inner_it = iter->second.begin();
-			cout << iter->first << " " << inner_it->first << " " << inner_it->second << endl;
+			cout << iter->first-3700 << " " << inner_it->first-3700 << " " << inner_it->second << endl;
 			iter++;
 		}
 		cout << endl << endl;
@@ -389,6 +383,7 @@ RoutingNode::Broadcast(char* buffer)
 		#endif
 
 		neighbor.sin_port = nbrIter->first;
+		inet_pton(AF_INET, neighborConnectionInfo[nbrIter->first].c_str(), &(neighbor.sin_addr));
 		SendMessage(neighbor, buffer);
 		nbrIter++;
 	}
@@ -403,10 +398,40 @@ RoutingNode::WaitForAllClear()
 	//replace with message-type parser at some point
 	while (buffer[6] != '9' && buffer[7] != '0')
 	{
-		int n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&server, &sockLen);
+		int n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&neighbor, &sockLen);
 		/*commented out for code submission
 		if (n > 0)
 		{ cout << buffer << endl; }*/
+	}
+}
+
+int
+RoutingNode::RequestNeighborConnectionInfo()
+{
+	neighborsIter it = neighbors.begin();
+	while (it != neighbors.end())
+	{
+		char buffer[512];
+		bzero(buffer,512);
+		sprintf(buffer, "@%d~%d~%d", myID, RoutingMessage::REQCONINFO, it->first);
+		SendMessage(server, buffer);
+		bzero(buffer,512);
+	
+		#if logging > 1
+			cout << "Waiting for connection ACK...\n";
+		#endif
+
+		//wait for ack
+		//replace with message-type parser at some point
+		while (buffer[6] != '1' && buffer[7] != '7')
+		{
+			int n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&neighbor, &sockLen);
+		}
+
+		messages.clear();
+		parser.ParseMessage(buffer, fromNode, messages);
+		ProcessMessages();
+		it++;
 	}
 }
 
@@ -420,8 +445,8 @@ RoutingNode::InitializeForwardingTableConnections()
 	/********* Start Select() ***********/
 	fd_set readfds;
 	struct timeval tv;
-	tv.tv_sec = 1;
-	tv.tv_usec = 500000;	//wait for 1.5 second here
+	tv.tv_sec = 2;
+	tv.tv_usec = 0;	//wait for 2 second here
 
 	int rv = 1;
 

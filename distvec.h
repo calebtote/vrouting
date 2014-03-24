@@ -7,4 +7,7 @@ class DistanceVectorNode : public RoutingNode
 public:
 	virtual bool ProcessMessages();
 
+public:
+	
+
 };

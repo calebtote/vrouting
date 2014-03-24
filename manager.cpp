@@ -89,7 +89,7 @@ RoutingManager::ActivateNewNode(struct sockaddr_in newNode)
 			iter->second.connection.ipstr = inet_ntop(AF_INET, &newNode.sin_addr, ip4, INET_ADDRSTRLEN);
             iter->second.connection.port = iter->second.id;	//listen on port: Virtual-ID
 
-            #if logging > 0
+            #ifdef logging
 				cout << "Connected Activated!\n";
 				cout << "Node ID: " << iter->second.id << endl;
 				cout << "Node Port: " << iter->second.connection.port << endl;
@@ -101,11 +101,11 @@ RoutingManager::ActivateNewNode(struct sockaddr_in newNode)
 			
 			//let's be terrible developers:
 			//wait a bit to make sure a proper connection is setup on the other end
-			//500 microseconds - who will notice  :/
-			usleep(500);
+			//1 second - who will notice  :/
+			sleep(1);
 			SendNeighborInformation(iter->second, buf);
 
-			#if logging > 1
+			#ifdef logging
 				cout << "Active Nodes: " << activeNodeCount << endl << endl;
 			#endif
 
@@ -176,7 +176,7 @@ RoutingManager::SendMessageMap(struct Node n)
 int
 RoutingManager::SendMessage(struct sockaddr_in toNode, char buffer[1024])
 {
-	#if logging > 1
+	#ifdef logging
 		cout << "Sending: " << buffer << endl;
 	#endif
 	
@@ -189,8 +189,11 @@ RoutingManager::SendMessage(struct sockaddr_in toNode, char buffer[1024])
 	if (n < strlen(buffer)) 
 		perror("Sendto");
 
-	#if logging > 1
-		cout << "Sent: " << n << " bytes of data\n";
+	#ifdef logging
+		char ip[INET_ADDRSTRLEN];
+		inet_ntop(AF_INET, &toNode, ip, INET_ADDRSTRLEN);
+		cout << "Sent: " << n << " bytes of data to --> " 
+			<< ip << ":" << toNode.sin_port << endl;
 	#endif
 }
 
@@ -211,6 +214,8 @@ RoutingManager::Listen()
 	struct sockaddr_in from;
 	string input;
 	RoutingMessage parser;
+
+	int inputNode, inputNeighbor, inputCost;
 
 	cout << "Listening...\n";
 
@@ -251,8 +256,20 @@ RoutingManager::Listen()
 
 		if (FD_ISSET(STDIN, &readfds))
         {
-        		cin >> input;
-        		cout << input << endl;
+        		cin >> inputNode >> inputNeighbor >> inputCost;
+        		UpdateLink(GenerateVirtualNodeID(inputNode), GenerateVirtualNodeID(inputNeighbor), inputCost);
+
+				/* This is a hack because of time constraints
+        		TopologyIter iter = topology.begin();
+				while(iter != topology.end())
+				{
+					iter->second.converged = false;
+					iter++;
+				}*/
+
+				//everyone is probably converged after 3 seconds
+				sleep(3);
+				PassMessages();
         }
         else
         {
@@ -266,19 +283,32 @@ RoutingManager::Listen()
 			{
 				parser.ParseMessage(buffer, fromNode, messages);
 				ProcessMessages();
-			}
-		}
 
-		if(IsNetworkConverged())
-		{
-			for(TopologyIter it = topology.begin(); it != topology.end(); it++)
-				SendMessageMap(it->second);
-			
-			PassMessages();
+				if(IsNetworkConverged())
+				{
+					for(TopologyIter it = topology.begin(); it != topology.end(); it++)
+						SendMessageMap(it->second);
+					
+					PassMessages();
+				}
+			}
 		}
 	}
 
 //	n = recvfrom(mySocket,buffer,512,0,(struct sockaddr *)&from, &sockLen);
+}
+
+int
+RoutingManager::UpdateLink(int node, int neighbor, int cost)
+{
+	char b[512];
+	bzero(b,512);
+	sprintf(b, "@%d~%d~%d.%d", SERVER_PORT, RoutingMessage::LINKUPDATE, neighbor, cost);
+	SendMessage(topology.at(node).connection.theirAddress, b);
+
+	bzero(b,512);
+	sprintf(b, "@%d~%d~%d.%d", SERVER_PORT, RoutingMessage::LINKUPDATE, node, cost);
+	SendMessage(topology.at(neighbor).connection.theirAddress, b);
 }
 
 bool
@@ -424,7 +454,7 @@ RoutingManager::ParseMessageFile(char* filePath, const int MAX_CHARS_PER_LINE,
 		sprintf(b, "@%d~%d~%d.%s", SERVER_PORT, RoutingMessage::NEWMESSAGE, to, theMsg);
 		nodeMessages.insert(pair<int,string>(from, b));
 
-		#if logging > 1
+		#ifdef logging
 			cout << "Message Stored: " << from << "|" << b << endl;
 		#endif
 	}
@@ -444,7 +474,7 @@ RoutingManager::AddNodeLink(int nodeID, int destID, int destCost)
 
 		topology.insert(pair<int, Node>(nodeID, n));
 
-		#if logging > 0
+		#ifdef logging
 			cout << "\nNode Added: " << n.id << endl;
 			cout << "Neighbor {" << destID << "} added to {" << nodeID 
 				<< "}, with cost {" << n.neighbors.at(destID) << "}\n\n";
@@ -454,7 +484,7 @@ RoutingManager::AddNodeLink(int nodeID, int destID, int destCost)
 	{
 		topology.at(nodeID).neighbors.insert(pair<int,int>(destID, destCost));
 
-		#if logging > 0
+		#ifdef logging
 			cout << "->Neighbor {" << destID << "} added to {" << nodeID 
 				<< "}, with cost {" << topology.at(nodeID).neighbors.at(destID) << "}\n";
 		#endif

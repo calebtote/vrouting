@@ -84,6 +84,7 @@ LinkStateNode::ProcessMessages()
 
 				if(topologyUpdated)
 				{
+					Dijkstra(topology);
 					GenerateLSP();
 					FloodLSPs();
 					topologyUpdated = false;
@@ -110,8 +111,27 @@ LinkStateNode::ProcessMessages()
 
 				neighbors.insert(pair<int,int>(destID, destCost));
 				topology[myID][destID] = destCost;
-				UpdateForwardingTable(destID, destID, destCost);
+				Dijkstra(topology);
+				GenerateLSP();
+				FloodLSPs();
 			} break;
+			case RoutingMessage::LINKUPDATE: 
+			{
+				int neighbor, destCost;
+				string buf(iter->second);
+				string delim = ".";	
+				neighbor = atoi(buf.substr(0, buf.find(delim)).c_str());
+				buf.erase(0, buf.find(delim) + delim.length());
+				destCost = atoi(buf.substr(0, buf.find(delim)).c_str());
+
+				neighbors[neighbor] = destCost;
+				topology[myID][neighbor] = destCost;
+				topology[neighbor][myID] = destCost;
+				Dijkstra(topology);
+				GenerateLSP();
+				FloodLSPs();
+
+			}break;
 			default: RoutingNode::ProcessMessages();
 		}
 		iter++;
@@ -216,6 +236,8 @@ LinkStateNode::InitializeForwardingTableConnections()
 	}
 
 	Dijkstra(topology);
+	GenerateLSP();
+	FloodLSPs();
 
 	char converged[20];
 	sprintf(converged, "@%d~%d~ ~", myID, RoutingMessage::CONVERGED);
@@ -231,21 +253,19 @@ LinkStateNode::Dijkstra(map<int,map<int, int> > topo)
 {
 	map<int,map<int, int> >::iterator it = topo.begin();
 	#if logging > 2
+	cout << "\t** Printing Neighbors Before Dijkstra **\n";
 		while(it != topo.end())
 		{
-			cout << "\tNode: " << it->first << " connected to:";
+			cout << "\tNode: " << it->first << " connected to:\n";
 			map<int,int, less<int> >::iterator inner_it = it->second.begin();
 			while(inner_it != it->second.end())
 			{
-				cout << "--" << inner_it->first << " with cost: " << inner_it->second << endl;
+				cout << "\t\t--" << inner_it->first << " with cost: " << inner_it->second << endl;
 				inner_it++;
 			}
 			it++;
 		}
 	#endif
-
-	map<int,int> distance;
-	map<int,int> previous;
 
 	map<int,int>::iterator distIt;
 	map<int,int>::iterator prevIt;
@@ -273,11 +293,15 @@ LinkStateNode::Dijkstra(map<int,map<int, int> > topo)
 
 	while(!nodes.empty())
 	{
+		#if logging > 2
+			cout << "\n\t\t---> Dijkstra Loop Begin <---\n";
+		#endif
+
 		int minVal = 9999;
 		int curNode = -1;
 		for(distIt = distance.begin(); distIt != distance.end(); distIt++)
 		{
-			cout << "distit:" << distIt->first << ":" << distIt->second << endl;
+			//cout << "distit:" << distIt->first << ":" << distIt->second << endl;
 			if(nodes.find(distIt->first) != nodes.end() && distIt->second < minVal)
 			{
 				minVal = distIt->second;
@@ -305,10 +329,6 @@ LinkStateNode::Dijkstra(map<int,map<int, int> > topo)
 				while(inner_it != t->second.end())
 				{
 					int x = distance[curNode] + inner_it->second;
-					
-					#if logging > 2
-						cout << "\t->Neighbor: " << t->second.begin()->first << " with link cost: " << x << endl;
-					#endif
 
 					if(x < distance[inner_it->first])
 					{
@@ -316,7 +336,7 @@ LinkStateNode::Dijkstra(map<int,map<int, int> > topo)
 						previous[inner_it->first] = curNode;
 
 						#if logging > 2						
-							cout << "\t-->Distance to {" << inner_it->first << "} : " << distance[inner_it->first] << endl;
+							cout << "\t-->Distance to {" << inner_it->first << "} updated: " << distance[inner_it->first] << endl;
 							cout << "\t\t->Previous Hop {" << previous[inner_it->first] << "}\n";
 						#endif
 					}
@@ -327,24 +347,97 @@ LinkStateNode::Dijkstra(map<int,map<int, int> > topo)
 		}
 	}
 
-	vector<int> path;
-	int p = 3701;
-	path.push_back(3701);
-	while(p != myID)
+	RebuildForwardingTable();
+}
+
+int
+LinkStateNode::RebuildForwardingTable()
+{	
+	topologyIter topoIt = topology.begin();
+
+	#if logging > 1
+		cout << "\t\t*** Rebuilding Forwarding Table ***\n";
+	#endif
+
+	while(topoIt != topology.end())
 	{
-		cout << "previous[" << p << "]: " << previous[p] << endl;
-		p = previous[p];
+		#if loggin > 2
+			cout << "\n\t\t---- Loop Begin | topoIt->first --> " << topoIt->first << endl;
+		#endif
+
+		vector<int> path;
+		int p = topoIt->first;
 		path.push_back(p);
-		//cin.get();
-	}
 
-	vector<int>::reverse_iterator pIter = path.rbegin();
-	while(pIter != path.rend())
-	{
-		cout << "Hop: {" << *pIter << "} --\n";
+		int pathCost = distance[p];
+		#if logging > 0
+			cout << "My ID: " << myID << endl;
+		#endif
+
+		while(p != myID)
+		{
+			p = previous[p];
+			path.push_back(p);
+		}
+
+		vector<int>::reverse_iterator pIter = path.rbegin();
 		pIter++;
+
+		//Erase the current entry because I didn't use a 
+		//better option for storing the forwarding table. 
+		forwardingTable.erase(topoIt->first);
+		topoIt->first == myID ? forwardingTable[myID][myID] = 0 : forwardingTable[topoIt->first][*pIter] = pathCost;
+
+		#if logging > 2
+			pIter--;
+			while(pIter != path.rend())
+			{
+				cout << "Hop: {" << *pIter << "} --\n";
+				pIter++;
+			}
+		#endif
+
+		topoIt++;
 	}
 
+	forwardingTableIter iter = forwardingTable.begin();	
+	#if logging > 1
+		cout << "\n\n\t\t\t*** Forwarding Table Updated! ***\n";
+		while(iter != forwardingTable.end())
+		{
+			map<int,int, less<int> >::iterator inner_it = iter->second.begin();
+			cout << "\t\t\t--Dest: " << iter->first << "\tHop: " << inner_it->first << "\tCost: " << inner_it->second << endl;
+			iter++;
+		}
+	#else
+		vector<int> path;
+		vector<int>::reverse_iterator pathIt = path.rbegin();
+		pathIt++;
+
+		while(iter != forwardingTable.end())
+		{
+			path.clear();
+			int p = iter->first;
+			path.push_back(p);
+
+			while(p != myID)
+			{
+				p = previous[p];
+				path.push_back(p);
+			}
+
+			pathIt = path.rbegin();
+			cout << iter->first-3700 << " " << distance[iter->first] << ":" << flush;
+			while(pathIt != path.rend())
+			{
+				cout << " " << *pathIt-3700 << flush;
+				pathIt++;
+			}
+			cout << endl;
+			iter++;
+		}
+		cout << endl << endl;
+	#endif
 }
 
 
@@ -418,6 +511,7 @@ int main(int argc, const char* argv[])
 
 	lsNode->WaitForAllClear();
 	lsNode->RequestNeighborConnectionInfo();
+	lsNode->Dijkstra(lsNode->topology);
 	lsNode->GenerateLSP();
 	lsNode->FloodLSPs();
 	lsNode->InitializeForwardingTableConnections();

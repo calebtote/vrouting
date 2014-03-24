@@ -8,7 +8,7 @@
 // 1 : informational
 // 2 : debugging
 // 3 : give me er'thang
-#define logging 3
+#define logging 0
 
 #define STDIN 0
 

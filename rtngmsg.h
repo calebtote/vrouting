@@ -47,6 +47,7 @@ public:
 		LINKADD = 21, //@7777~21~3702.11 :: Connected to 3702 with cost 11
 		LINKUPDATE = 22, //same as above, just with code 22
 		VECTOR = 23,
+		REQUPDATE = 24, 
 		REQNBRINFO = 25, //@7777~25~3701 :: Give me my neighbors
 		CONVERGED = 30,
 

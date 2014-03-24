@@ -43,6 +43,7 @@ public:
 	int ProcessMessages();
 
 	bool IsNetworkConverged();
+	int UpdateLink(int node, int neighbor, int cost);
 	int PassMessages();
 	
 	int ParseInputFile(char* filePath, const int MAX_CHARS_PER_LINE = 512, 

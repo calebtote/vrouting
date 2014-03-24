@@ -3,15 +3,17 @@
 //#include "tcpcon.h"
 #include "node.h"
 #include "rtngmsg.h"
+#include <set>
 
 typedef map<int,int, less<int> >::iterator neighborsIter;
 typedef map<int, map<int,int>, less<int> >::iterator forwardingTableIter;
+typedef map<int, map<int,int>, less<int> >::iterator neighborVectorsIter;
 typedef multimap<int,string>::iterator messagesToSendIter;
 
 class RoutingNode
 {
 public:
-	RoutingNode(){forwardingTableUpdated = false; topologyUpdated = false;}
+	RoutingNode(){forwardingTableUpdated = false; neighborVectorsUpdated = false;}
 	int Initialize(const char* theManager);
 	int SendMessage(struct sockaddr_in toNode, char buffer[512]);
 	//NetworkConnection *myConnection;
@@ -25,7 +27,10 @@ public:
 	int GetNeighborLinkCost(int id);
 	bool IsNewNode(int destID);
 	bool IsBetterPath(int destID, int destCost);
+	int RequestVectorUpdates();
+	int UpdateNeighborVector(int neighbor, int node, int cost);
 	int UpdateForwardingTable(int dest, int hop, int cost);
+	int RebuildForwardingTable();
 	int SendForwardingTableToNeighbors();
 	int Broadcast(char* buffer);
 	int WaitForAllClear();
@@ -42,14 +47,20 @@ public:
 	//destination | hop, cost
 	map<int, map<int,int> > forwardingTable;
 
+	//neighbor | node, cost
+	map<int, map<int,int> > neighborVectors;
+
 	//this nodes known neighbors
 	//Neighbors:  <Destination,Cost>
 	map<int,int> neighbors;
 	map<int,string> neighborConnectionInfo;
+
+	set<int> knownNodes;
 	
 	int fromNode;
 	bool forwardingTableUpdated;
-	bool topologyUpdated;
+	bool neighborVectorsUpdated;
+
 	multimap<int, string> messages;
 	multimap<int, string> messagesToSend;
 	RoutingMessage parser;

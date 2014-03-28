@@ -3,6 +3,8 @@ vrouting
 
 Virtual Routing
 
+Original Project Specification: [Implementation of Unicast Routing Protocols](https://dl.dropboxusercontent.com/u/1817765/MP2.pdf)
+
 - This started as a project for class, so some things were implemented for the sake of hacking stuff together by the deadline.
 
 **Things to no judge me for (yet):**
